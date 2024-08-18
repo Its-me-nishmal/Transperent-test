@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Image Mixer</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f4f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.1);
+            max-width: 90%;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            animation: fadeIn 1s ease-in-out;
+        }
+
+        h1 {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 20px;
+            animation: slideIn 1s ease-in-out;
+        }
+
+        label {
+            display: block;
+            margin: 15px 0 5px;
+            font-size: 1rem;
+            color: #555;
+            animation: slideIn 1.2s ease-in-out;
+        }
+
+        input[type="file"] {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            width: 100%;
+            box-sizing: border-box;
+            animation: slideIn 1.4s ease-in-out;
+        }
+
+        canvas {
+            display: block;
+            margin: 20px auto;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            max-width: 100%;
+            animation: slideIn 1.6s ease-in-out;
+        }
+
+        button, a#downloadButton {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            text-decoration: none;
+            transition: background-color 0.3s ease, transform 0.3s ease;
+            animation: fadeIn 2s ease-in-out;
+        }
+
+        button:hover, a#downloadButton:hover {
+            background-color: #0056b3;
+            transform: translateY(-3px);
+        }
+
+        button:active, a#downloadButton:active {
+            transform: translateY(1px);
+        }
+
+        a#downloadButton {
+            display: none;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            label, button, a#downloadButton {
+                font-size: 0.9rem;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Responsive Image Mixer</h1>
+        <div>
+            <label for="image1">Upload Base Image:</label>
+            <input type="file" id="image1" accept="image/*">
+            <label for="image2">Upload Overlay Image:</label>
+            <input type="file" id="image2" accept="image/*">
+        </div>
+        <canvas id="canvas"></canvas>
+        <button id="mixImagesButton">Mix Images</button>
+        <a id="downloadButton" download="mixed-image.png">Download Mixed Image</a>
+    </div>
+    <script>
+        const image1Input = document.getElementById('image1');
+        const image2Input = document.getElementById('image2');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const mixImagesButton = document.getElementById('mixImagesButton');
+        const downloadButton = document.getElementById('downloadButton');
+
+        function loadImage(input, callback) {
+            const file = input.files[0];
+            if (file) {
+                const img = new Image();
+                img.onload = () => callback(img);
+                img.src = URL.createObjectURL(file);
+            }
+        }
+
+        function detectLargestTransparentArea(img) {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+
+            const imageData = ctx.getImageData(0, 0, img.width, img.height);
+            const pixels = imageData.data;
+            let areas = [];
+
+            for (let y = 0; y < img.height; y++) {
+                for (let x = 0; x < img.width; x++) {
+                    const index = (y * img.width + x) * 4;
+                    const alpha = pixels[index + 3];
+
+                    if (alpha === 0) {
+                        let found = false;
+                        for (let area of areas) {
+                            if (x >= area.minX && x <= area.maxX && y >= area.minY && y <= area.maxY) {
+                                area.maxX = Math.max(area.maxX, x);
+                                area.maxY = Math.max(area.maxY, y);
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        if (!found) {
+                            areas.push({ minX: x, minY: y, maxX: x, maxY: y });
+                        }
+                    }
+                }
+            }
+
+            if (areas.length === 0) {
+                alert('No suitable transparent area found.');
+                return null;
+            }
+
+            let largestArea = areas.reduce((maxArea, area) => {
+                const areaSize = (area.maxX - area.minX) * (area.maxY - area.minY);
+                return areaSize > maxArea.size ? { ...area, size: areaSize } : maxArea;
+            }, { size: 0 });
+
+            return largestArea;
+        }
+
+        function mixImages() {
+            loadImage(image1Input, function (baseImage) {
+                const largestTransparentArea = detectLargestTransparentArea(baseImage);
+
+                if (!largestTransparentArea) return;
+
+                loadImage(image2Input, function (overlayImage) {
+                    canvas.width = baseImage.width;
+                    canvas.height = baseImage.height;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    ctx.drawImage(baseImage, 0, 0);
+
+                    const aspectRatioOverlay = overlayImage.width / overlayImage.height;
+                    const aspectRatioTransparent = (largestTransparentArea.maxX - largestTransparentArea.minX) / (largestTransparentArea.maxY - largestTransparentArea.minY);
+                    let cropWidth, cropHeight;
+
+                    if (aspectRatioOverlay > aspectRatioTransparent) {
+                        cropHeight = overlayImage.height;
+                        cropWidth = overlayImage.height * aspectRatioTransparent;
+                    } else {
+                        cropWidth = overlayImage.width;
+                        cropHeight = overlayImage.width / aspectRatioTransparent;
+                    }
+
+                    const cropX = (overlayImage.width - cropWidth) / 2;
+                    const cropY = (overlayImage.height - cropHeight) / 2;
+
+                    ctx.drawImage(
+                        overlayImage,
+                        cropX, cropY, cropWidth, cropHeight,
+                        largestTransparentArea.minX, largestTransparentArea.minY,
+                        largestTransparentArea.maxX - largestTransparentArea.minX, largestTransparentArea.maxY - largestTransparentArea.minY
+                    );
+
+                    downloadButton.style.display = 'inline-block';
+                    downloadButton.href = canvas.toDataURL();
+                });
+            });
+        }
+
+        mixImagesButton.addEventListener('click', mixImages);
+    </script>
+</body>
+</html>
